@@ -1,0 +1,3 @@
+#!/bin/sh
+
+docker run --rm --network="host" -e SONAR_HOST_URL="http://localhost:9000/" -e SONAR_LOGIN="5002510ad9b6373b69a7f8456dad4fa53c30d973" -v "`pwd`:/usr/src" sonarsource/sonar-scanner-cli -Dsonar.projectKey=5002510ad9b6373b69a7f8456dad4fa53c30d973
