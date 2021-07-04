@@ -1,5 +1,7 @@
 app.controller("challengesCtrl", function($scope, $http, $routeParams) {
 
+    $scope.percentDone = 0;
+    $scope.completionLabel = "0/0";
     $scope.getDescriptionLink = (chId) => {
         if(chId){
             return `/challenges/descriptions/${chId}`;
@@ -28,35 +30,53 @@ app.controller("challengesCtrl", function($scope, $http, $routeParams) {
             if(response != null && response.data != null && Array.isArray(response.data.challenges)){
                 $scope.levelNames = {};
                 var challengeDefinitions = response.data.challenges;
+                var challengeCheck = response.data.check;
+                let totalChCount = 0;
+                let passedChCount = 0;
                 if(challengeDefinitions.length >= 1){
                     //update the challenge definitions to include the current user's passed challenges
-                    for(let levelId in challengeDefinitions){
-                        var level = challengeDefinitions[levelId];
-                        $scope.levelNames[levelId] = level.name;
+                    challengeDefinitionsModified = challengeDefinitions.map(levelId =>{
+                        var level = levelId.level;
+                        $scope.levelNames[levelId] = levelId.name;
 
-                        var challenges = level.challenges;
+                        var challenges = levelId.challenges;
                         if(challenges.length>0){
                             $scope.challengesAvailable = true;
                         }
                         if(challenges!=null){
-                            for(let ch of challenges){
+                            challenges =  challenges.map(ch =>{
+                                const id = ch.id;
                                 var passedChallenges = $scope.user.passedChallenges;
+                                totalChCount++;
                                 if(passedChallenges!=null){
                                     for(let passedCh of passedChallenges){
                                         if(ch.id===passedCh.challengeId){
                                             ch.passed = true;
+                                            passedChCount++;
                                             break;
                                         }
                                     }
                                 }
-                            }
+                                challengeCheck.forEach(check => {
+                                    if(check.challenge_id === id){
+                                        ch = { ...check, ...ch };
+                                    }
+                                });
+                                return ch;
+                            })
+                            levelId.challenges = challenges
+                            return levelId;
                         }
-                    }
+
+                    })
                 }
+
                 $scope.targetUrl = response.data.targetUrl;
-                $scope.moduleChallengeDefinitions = challengeDefinitions;
+                $scope.moduleChallengeDefinitions = challengeDefinitionsModified;
+                $scope.moduleChallengeChecks = challengeCheck;
 
-
+                $scope.percentDone = passedChCount/totalChCount * 100;
+                $scope.completionLabel = `${passedChCount}/${totalChCount}`;
             }
             else{
                 $scope.challengesAvailable = false;

@@ -28,7 +28,8 @@ else {
     host: config.dbHost,
     database: config.dbName,
     user: config.dbUser,
-    password: aesCrypto.decrypt(config.encDbPass),
+    // password: aesCrypto.decrypt(config.encDbPass),
+    password:config.dbpass,
     multipleStatements:true
   };
 }
@@ -257,8 +258,9 @@ exports.init = async () => {
 //Creates a user in the database
 exports.insertUser = function(user,errCb,doneCb){
   var con = getConn();
-  var sql = "INSERT INTO users (id, accountId, teamId, familyName, givenName) VALUES (null, ?, null, ?, ?)";
-  con.query(sql, [user.accountId, user.familyName, user.givenName], function (err, result) {
+  var sql = "INSERT INTO users (id, accountId, teamId, familyName, givenName) VALUES (null, ?, ?, ?, ?)";
+  
+  con.query(sql, [user.accountId, user.teamId, user.familyName, user.givenName], function (err, result) {
     if (err) handleErr(errCb,err);
     else handleDone(doneCb,result);
   });
@@ -318,6 +320,31 @@ exports.updateUser = function(user,errCb,doneCb){
     if(err) handleErr(errCb,err);
     else handleDone(doneCb,result);
       
+  });
+};
+
+
+exports.upDateShowChallenge = function(body ,errCb,doneCb){
+  var con = getConn();
+  const challenge_id = body.challengeId;
+  const show_challenge = body.showChallengeValue;
+  var sql = "UPDATE challenge_check SET show_challenge = ? WHERE challenge_id = ?";
+  con.query(sql, [show_challenge, challenge_id], function (err, result) {
+    if(err) handleErr(errCb,err);
+    else handleDone(doneCb,result);
+      
+  });
+};
+
+exports.upDateShowSolution = function(body ,errCb,doneCb){
+  var con = getConn();
+  console.log(body)
+  const challenge_id = body.challengeId;
+  const show_solution = body.showChallengeSolutionValue;
+  var sql = "UPDATE challenge_check SET show_solution = ? WHERE challenge_id = ?";
+  con.query(sql, [show_solution, challenge_id], function (err, result) {
+    if(err) handleErr(errCb,err);
+    else handleDone(doneCb,result);    
   });
 };
 
@@ -459,16 +486,27 @@ exports.deleteTeam = function(user,teamId,errCb,doneCb){
 /**
  * Gets a team members with completed modules
  */
-exports.getTeamMembersByBadges = async (teamId) => {
+exports.getTeamMembersByBadges = async (teamId, days) => {
   let con = getConn();
-  let sql = "SELECT badges.moduleId, users.givenName, users.familyName FROM users LEFT JOIN badges on badges.userId=users.id";
+  let sql = "SELECT badges.moduleId, badges.timestamp, users.givenName, users.familyName FROM users LEFT JOIN badges on badges.userId=users.id";
   let args = [];
-  if(teamId!==null){
+  if(teamId !== null && teamId !== "*"){
     sql+=" WHERE users.teamId = ?";
     args = [teamId];
   }
   sql+=" order by badges.moduleId, users.givenName, users.familyName";
   let result = await con.queryPromise(sql,args);
+
+  if(days){
+    let now = new Date();
+    now.setDate(now.getDate()-days);
+    let ts = now.getTime();
+    result = result.filter(record => {
+      if(!record.timestamp) return false;
+      let recordTs = new Date(record.timestamp).getTime();
+      return recordTs > ts;
+    });
+  }
   return result;
 };
 
@@ -538,6 +576,22 @@ exports.fetchChallengeEntriesForUser = function(user,errCb,doneCb){
   });
 };
 
+//fetch all data from challenge check table
+ exports.getChallengesCheck = async (errCb, doneCb) => {
+  var con = getConn();
+  var sql = "SELECT * FROM challenge_check";
+  
+  let result = await con.queryPromise(sql);
+  return result;
+};
+
+// fix solution bug
+exports.getSolutionAvailability = async (challenge_id, errCb, doneCb) => {
+  var con = getConn();
+  var sql = "SELECT * FROM challenge_check WHERE challenge_id = ?";
+  let result = await con.queryPromise(sql ,[challenge_id]);
+  return result;
+};
 
 
 /**
@@ -602,6 +656,7 @@ exports.getModuleStats = async () => {
   return con.queryPromise(sql, args);
 };
 
+
 /**
  * Players by team
  * @param {*} errCb 
@@ -610,14 +665,22 @@ exports.getModuleStats = async () => {
 exports.getTeamStats= async (limit) => {
   var con = getConn();
 
+  let result = await con.queryPromise("select * from users");
+  const allPlayerCount = result.length;
+
   var sql = "SELECT teams.id as id, teams.name as teamName, count(users.id) as playerCount from teams INNER JOIN users on users.teamId=teams.id group by teams.id order by playerCount desc";
   var args = [];
+
   if(limit!==null){
     sql+=" limit ?";
     args=[limit];
   }
   
-  return await con.queryPromise(sql, args);
+  result = await con.queryPromise(sql, args);
+
+  result.splice(0,0,{id:"*", teamName: "All Teams", playerCount: allPlayerCount});
+
+  return result;
   
 };
 
